@@ -26,7 +26,7 @@ VoiceRuntime::VoiceRuntime(std::string directory, Tc002Speaker& speaker,
                 },
                 [this](const std::string& target) {
                   downloadGeneration_ =
-                      download_.start(config_.get().url, target);
+                      download_.start(config_.get().url, target, config_.get().caTrust);
                   return true;
                 },
                 [this] { stopSpeaker(); }}) {
@@ -96,6 +96,7 @@ void VoiceRuntime::tick(int64_t now, bool allowed) {
     WebSocket::Endpoint endpoint;
     if (parseOrigin(c.url, endpoint)) {
       session_.connecting(c, now);
+      endpoint.anchors = c.caTrust;
       generation_ = socket_.connect(endpoint);
       reconnectAt_ = now + 10000;
     }

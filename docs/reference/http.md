@@ -3213,6 +3213,7 @@ This route and `POST` below exist only while [capabilities](#get-apiv1capabiliti
 | `config.pipeline` | string | the chosen Assist pipeline ID, `""` for Home Assistant's default |
 | `config.device` | string | the Home Assistant device ID whose area is the clock's room, `""` when none is set |
 | `config.tokenSet` | boolean | an access token is saved. The token itself is never returned |
+| `config.caSet` | boolean | a custom CA is saved for the Home Assistant connection and spoken answers |
 | `state` | string | `offline`, `connecting`, `ready`, `starting`, `listening`, `processing`, `speaking` or `error` |
 | `error` | string | why the last attempt failed, as a code such as `tokenRejected`. `""` when all is well. The web UI shows each code as a sentence |
 | `pipelines` | array | Home Assistant's Assist pipelines once connected. `[]` before |
@@ -3225,8 +3226,14 @@ curl http://<awtrix-ip>/api/v1/voice
 
 Changes the Home Assistant Voice settings.
 
-**Request:** any of `enabled`, `url`, `pipeline`, `device`, `token`, or `"clearToken": true` to
-delete the token. Fields you leave out keep their value.
+**Request:** a JSON object up to 32768 bytes with any of `enabled`, `url`, `pipeline`, `device`,
+`token`, `ca`, or `"clearToken": true` to delete the token. Fields you leave out keep their value,
+except that changing server clears a saved CA unless `ca` is supplied too.
+
+* `ca` is PEM text containing only CA certificates, up to 16384 bytes. It needs an HTTPS address.
+  `""` removes the saved CA. Omitted keeps it for the same server.
+* A custom CA replaces public roots for Voice only. The server name and certificate validity dates
+  are checked for the connection and spoken answers. Downloads cannot follow redirects.
 
 * `device` is a Home Assistant device ID (letters and digits, up to 64), `""` for none.
 
@@ -3246,7 +3253,7 @@ other web pages and scripts from sending your voice to another server.
 | Status | Condition |
 |---|---|
 | 403 | `forbiddenOrigin`: not sent from the device's own web UI |
-| 422 | `validationFailed`: `field` names the wrong value: `url`, `token`, `pipeline`, `device` or `enabled` |
+| 422 | `validationFailed`: `field` names the wrong value: `url`, `token`, `pipeline`, `device`, `ca` or `enabled` |
 | 500 | `internalError`: the settings could not be saved |
 
 ```bash

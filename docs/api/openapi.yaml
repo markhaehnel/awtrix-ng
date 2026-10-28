@@ -2456,13 +2456,14 @@ paths:
                 properties:
                   config:
                     type: object
-                    required: [enabled, url, pipeline, device, tokenSet]
+                    required: [enabled, url, pipeline, device, tokenSet, caSet]
                     properties:
                       enabled: { type: boolean }
                       url: { type: string, description: "Home Assistant address. \"\" when none is set." }
                       pipeline: { type: string, description: "Assist pipeline ID. \"\" for the default." }
                       device: { type: string, description: "Home Assistant device ID whose area is the room for requests. \"\" when none is set." }
                       tokenSet: { type: boolean, description: The token itself is never returned. }
+                      caSet: { type: boolean, description: A custom CA is saved for the Voice connection and spoken answers. }
                   state: { type: string, enum: [offline, connecting, ready, starting, listening, processing, speaking, error] }
                   error:
                     type: string
@@ -2473,7 +2474,7 @@ paths:
       tags: [system]
       summary: Change the Home Assistant Voice settings
       description: |
-        Only from the device's own web page: needs X-Awtrix-Voice: 1 and an Origin matching the device. Left-out fields keep their value. enabled needs an address and a token. A new address needs the token again.
+        Only from the device's own web page: needs X-Awtrix-Voice: 1 and an Origin matching the device. Body limit 32768 bytes. Left-out fields keep their value. enabled needs an address and a token. A new server needs the token again and clears the saved CA unless ca is supplied too.
       parameters:
         - { name: X-Awtrix-Voice, in: header, required: true, schema: { type: string, enum: ["1"] } }
       requestBody:
@@ -2489,6 +2490,10 @@ paths:
                 device: { type: string, maxLength: 64, pattern: "^[A-Za-z0-9]*$", description: "Home Assistant device ID. \"\" for none." }
                 token: { type: string, maxLength: 4096, description: A long-lived access token. }
                 clearToken: { type: boolean, description: true deletes the saved token. }
+                ca:
+                  type: string
+                  maxLength: 16384
+                  description: 'PEM CA certificates, at most 16384 bytes. Needs HTTPS. Replaces public roots for Voice only, including spoken answers. Checks server name and validity dates. No redirects. Empty removes the saved CA.'
       responses:
         "404": { $ref: "#/components/responses/NotOnThisDevice" }
         "401": { $ref: "#/components/responses/Unauthorized" }

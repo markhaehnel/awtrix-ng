@@ -16,6 +16,8 @@ namespace awtrix::tls {
 class TrustAnchors {
  public:
   static std::shared_ptr<const TrustAnchors> fromPem(const std::string& pem);
+  // Strict PEM containing only CA certificates, with no keys or trailing data.
+  static std::shared_ptr<const TrustAnchors> fromCaPem(const std::string& pem);
   static std::shared_ptr<const TrustAnchors> fromFile(const std::string& path);
   ~TrustAnchors();
   x509_store_st* store() const { return store_; }
@@ -70,6 +72,9 @@ namespace awtrix {
 // none loaded every connection fails.
 bool loadTlsTrust(const std::string& caFile, std::string& error);
 void useTlsTrust(httplib::Client& client);
+// Explicit per-connection roots; the caller must disable redirects.
+void useTlsTrust(httplib::Client& client, std::shared_ptr<const tls::TrustAnchors> anchors,
+                 const std::string& host);
 // Request-local trust, replacing public roots. A pin identifies the exact leaf; a CA verifies host.
 // Callers must validate options and disable redirects before using this policy.
 bool useRequestTlsTrust(httplib::Client& client, const std::string& pin,
@@ -77,5 +82,6 @@ bool useRequestTlsTrust(httplib::Client& client, const std::string& pin,
 // A TLS 1.2+ client context that verifies peers against the public anchors during the handshake;
 // nullptr while none are loaded.
 ssl_ctx_st* newTrustedTlsContext();
+ssl_ctx_st* newTrustedTlsContext(std::shared_ptr<const tls::TrustAnchors> anchors);
 inline bool expectTlsPeer(ssl_st* ssl, const std::string& host) { return tls::expectPeer(ssl, host); }
 }

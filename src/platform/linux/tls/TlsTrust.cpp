@@ -51,6 +51,23 @@ std::shared_ptr<const TrustAnchors> TrustAnchors::fromPem(const std::string& pem
   return adopt(store);
 }
 
+std::shared_ptr<const TrustAnchors> TrustAnchors::fromCaPem(const std::string& pem) {
+  std::size_t at = 0;
+  while (at < pem.size()) {
+    at = pem.find_first_not_of(" \t\r\n", at);
+    if (at == std::string::npos) break;
+    constexpr char begin[] = "-----BEGIN CERTIFICATE-----";
+    constexpr char end[] = "-----END CERTIFICATE-----";
+    if (pem.compare(at, sizeof(begin) - 1, begin) != 0) return nullptr;
+    const auto last = pem.find(end, at + sizeof(begin) - 1);
+    if (last == std::string::npos) return nullptr;
+    const auto certificates = readCertificates(pem.substr(at, last + sizeof(end) - 1 - at));
+    if (certificates.size() != 1 || X509_check_ca(certificates.front().get()) <= 0) return nullptr;
+    at = last + sizeof(end) - 1;
+  }
+  return fromPem(pem);
+}
+
 std::shared_ptr<const TrustAnchors> TrustAnchors::fromFile(const std::string& path) {
   X509_STORE* store = X509_STORE_new();
   if (store && X509_STORE_load_file(store, path.c_str()) != 1) {
@@ -172,6 +189,14 @@ void useTlsTrust(httplib::Client& client) {
   });
 }
 
+void useTlsTrust(httplib::Client& client, std::shared_ptr<const tls::TrustAnchors> anchors,
+                 const std::string& host) {
+  client.set_server_certificate_verifier([anchors = std::move(anchors), host](SSL* ssl) {
+    return tls::chainTrusted(anchors.get(), ssl, host) ? httplib::SSLVerifierResponse::CertificateAccepted
+                                                     : httplib::SSLVerifierResponse::CertificateRejected;
+  });
+}
+
 bool useRequestTlsTrust(httplib::Client& client, const std::string& pin,
                         const std::string& ca, const std::string& host) {
   std::size_t at = 0;
@@ -208,7 +233,10 @@ bool useRequestTlsTrust(httplib::Client& client, const std::string& pin,
 }
 
 SSL_CTX* newTrustedTlsContext() {
-  const auto anchors = tls::publicAnchors();
+  return newTrustedTlsContext(tls::publicAnchors());
+}
+
+SSL_CTX* newTrustedTlsContext(std::shared_ptr<const tls::TrustAnchors> anchors) {
   if (!anchors) return nullptr;
   SSL_CTX* context = SSL_CTX_new(TLS_client_method());
   if (!context || !tls::applyProtocolPolicy(*context)) {

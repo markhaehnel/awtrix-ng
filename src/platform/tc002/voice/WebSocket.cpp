@@ -156,7 +156,8 @@ class WebSocket::Impl::Connection {
     if (endpoint_.host.empty() || !printable(endpoint_.host) || endpoint_.port.empty() || !printable(endpoint_.port) ||
         endpoint_.target.empty() || endpoint_.target.front() != '/' || !printable(endpoint_.target))
       return fail();
-    if (endpoint_.tls && !(context_ = newTrustedTlsContext())) return fail();
+    if (endpoint_.tls && !(context_ = endpoint_.anchors ? newTrustedTlsContext(endpoint_.anchors)
+                                                       : newTrustedTlsContext())) return fail();
     lookup_ = posix::Resolver::start([host = endpoint_.host, port = endpoint_.port] {
       return posix::Resolver::lookup(host, port);
     });

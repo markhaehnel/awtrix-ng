@@ -54,7 +54,7 @@ def serve_session(conn, mode):
         return
     conn.recv(1024)
 
-def case(host, tls, trust, mode, cert, key):
+def case(host, tls, trust, mode, cert, key, custom=None):
     listener = socket.socket()
     listener.bind(("127.0.0.1", 0))
     listener.listen(1)
@@ -91,7 +91,7 @@ def case(host, tls, trust, mode, cert, key):
     worker = threading.Thread(target=serve)
     if mode != "notrust":
         worker.start()
-    result = subprocess.run([binary, host, str(port), "tls" if tls else "plain", trust, mode], timeout=12)
+    result = subprocess.run([binary, host, str(port), "tls" if tls else "plain", trust, mode] + ([custom] if custom else []), timeout=12)
     if mode == "notrust":
         listener.settimeout(0.5)
         try:
@@ -117,6 +117,9 @@ with tempfile.TemporaryDirectory(prefix="awtrix-voice-tls-") as directory:
     other, _ = certificate(directory, "other")
     case("127.0.0.1", False, "", "echo", cert, key)
     case("localhost", True, cert, "echo", cert, key)
+    case("localhost", True, other, "echo", cert, key, cert)
+    case("localhost", True, cert, "reject", cert, key, other)
+    case("127.0.0.1", True, other, "reject", cert, key, cert)
     case("localhost", True, other, "reject", cert, key)
     case("127.0.0.1", True, cert, "reject", cert, key)
     case("localhost", True, "", "notrust", cert, key)

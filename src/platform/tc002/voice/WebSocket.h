@@ -4,16 +4,18 @@
 #include <string>
 #include <vector>
 
+namespace awtrix::tls { class TrustAnchors; }
+
 namespace awtrix::tc002::voice {
 // A single asynchronous network owner. Calls from the render thread only
 // enqueue; neither DNS, TLS, socket writes nor a reconnect can block panel
-// rendering. TLS peers are verified against the process trust store
-// (tls/TlsTrust); without a loaded store a TLS connect fails.
+// rendering. TLS peers use the endpoint's CA store or the public roots when none is supplied.
 class WebSocket {
  public:
   struct Endpoint {
     std::string host, port, target;
     bool tls = false;
+    std::shared_ptr<const awtrix::tls::TrustAnchors> anchors = {};
   };
   struct Event {
     enum Kind { Open, Text, Closed, Failed } kind = Failed;

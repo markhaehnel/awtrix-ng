@@ -10,11 +10,14 @@
 #include "platform/linux/host/vendor/httplib.h"
 #include "platform/linux/net/HttpClient.h"
 #include "platform/posix/Files.h"
+#include "platform/linux/tls/TlsTrust.h"
+#include "core/net/Url.h"
 
 namespace awtrix::net {
 struct FileDownload::Impl {
   Limits limits;
   std::string directory, origin, target;
+  std::shared_ptr<const tls::TrustAnchors> anchors;
   std::mutex mutex;
   std::condition_variable changed;
   std::thread thread;
@@ -51,18 +54,27 @@ struct FileDownload::Impl {
       const uint64_t g = generation;
       const std::string path = target;
       httplib::Client connection(origin);
+      const auto trust = anchors;
+      const std::string addressOrigin = origin;
+      const auto address = parseUrl(addressOrigin);
       pending = false;
       // A cancel from here on interrupts this download: it moves the generation on under the
       // same lock.
       interrupt.rearm();
       lock.unlock();
-      configure(connection, {limits.timeoutMs, 5, limits.followRedirects});
+      configure(connection, {limits.timeoutMs, 5, limits.followRedirects && !trust});
+      const bool trustValid = !trust || (address && address->tls());
+      if (trust && trustValid) {
+        std::string host(address->host);
+        if (host.front() == '[') host = host.substr(1, host.size() - 2);
+        useTlsTrust(connection, trust, host);
+      }
       interrupt.watch(connection);
       std::string file = directory + "/file-XXXXXX";
       int fd = directory.empty() ? -1 : ::mkstemp(file.data());
       Failure failure = Failure::Network;
       int status = 0;
-      if (fd >= 0 && current(g)) {
+      if (fd >= 0 && current(g) && trustValid) {
         ReceivedBody received;
         bool noRoom = false;
         const BodyPolicy policy{limits.maxBytes, [&] { return current(g); },
@@ -99,11 +111,13 @@ struct FileDownload::Impl {
 FileDownload::FileDownload(const std::string& directory, const std::string& prefix, Limits limits)
     : impl_(new Impl(directory, prefix, std::move(limits))) {}
 FileDownload::~FileDownload() = default;
-uint64_t FileDownload::start(std::string origin, std::string target) {
+uint64_t FileDownload::start(std::string origin, std::string target,
+                             std::shared_ptr<const tls::TrustAnchors> anchors) {
   cancel();
   std::lock_guard<std::mutex> lock(impl_->mutex);
   impl_->origin = std::move(origin);
   impl_->target = std::move(target);
+  impl_->anchors = std::move(anchors);
   impl_->pending = true;
   impl_->changed.notify_one();
   return impl_->generation;

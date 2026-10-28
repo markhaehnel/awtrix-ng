@@ -5,9 +5,12 @@
 #include "platform/tc002/voice/WebSocket.h"
 
 namespace awtrix::tc002::voice {
+inline constexpr std::size_t kMaxCaBytes = 16384, kMaxConfigBytes = 32768;
 struct Config {
   bool enabled = false;
   std::string url, token, pipeline, device;
+  std::string ca = {};
+  std::shared_ptr<const tls::TrustAnchors> caTrust = {};
 };
 // An origin only: credentials, paths, queries and fragments are rejected.
 bool parseOrigin(std::string_view url, WebSocket::Endpoint& endpoint);

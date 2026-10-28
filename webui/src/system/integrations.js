@@ -63,13 +63,32 @@ function voiceSection(page){
   const dev=el('input',{type:'text',autocomplete:'off',spellcheck:'false',placeholder:t('vcDevP'),'aria-label':t('vcDev')});
   const on=mkSwitch(false,()=>store({enabled:on.input.checked},t('saved')));
   const save=el('button',{class:'pri'},t('vcSave'));
-  let cur=null,pipes='';
+  let cur=null,pipes='',pendingCa=null;
+  const caState=el('div',{class:'badge'});
+  const caInput=el('input',{type:'file',accept:'.pem,.crt,.cer','aria-label':t('vcCa'),style:'display:none'});
+  const caChoose=el('button',null,t('vcCaChoose'));
+  const caRemove=el('button',null,t('vcCaRemove'));
+  function paintCa(){
+    caState.replaceChildren(t(pendingCa!==null?'vcCaPending':cur?.config?.caSet?'vcCaSaved':'vcCaPublic'));
+    caRemove.disabled=pendingCa!==null?!pendingCa:!cur?.config?.caSet;
+  }
+  caChoose.addEventListener('click',()=>caInput.click());
+  caInput.addEventListener('change',async()=>{
+    const file=caInput.files[0];caInput.value='';
+    if(!file)return;
+    if(!file.size||file.size>16384){toast(t('vcfca'),false);return;}
+    save.disabled=true;
+    try{pendingCa=await file.text();paintCa();}catch(e){toastErr(e);}
+    finally{save.disabled=false;}
+  });
+  caRemove.addEventListener('click',()=>{pendingCa='';paintCa();});
   const clear=armable(el('button',null,t('vcTokenClear')),()=>store({clearToken:true,enabled:false},t('saved')));
   const reason=code=>code?(STR['vce'+code]?t('vce'+code):code):'';
   function paint(d){
     const first=!cur;cur=d;
     const c=d.config||{};
     if(first){url.value=c.url||'';dev.value=c.device||'';}
+    paintCa();
     on.input.checked=!!c.enabled;
     tokenState.className='badge'+(c.tokenSet?' good':'');
     tokenState.replaceChildren(t(c.tokenSet?'vcTokenSet':'vcTokenNone'));
@@ -95,6 +114,7 @@ function voiceSection(page){
     try{
       await api('/api/v1/voice',{method:'POST',headers:{'Content-Type':'application/json','X-Awtrix-Voice':'1'},body:JSON.stringify(body)});
       if(body.token)token.value='';
+      if(Object.hasOwn(body,'ca')&&pendingCa===body.ca)pendingCa=null;
       toast(done);
     }catch(e){
       toast(e.code==='validationFailed'&&STR['vcf'+e.field]?t('vcf'+e.field):e.message,false);
@@ -106,6 +126,7 @@ function voiceSection(page){
     const body={url:url.value.trim(),pipeline:pipe.value,device:dev.value.trim().split(/[/?#]/).filter(Boolean).pop()||'',enabled:true};
     dev.value=body.device;
     if(token.value)body.token=token.value;
+    if(pendingCa!==null)body.ca=pendingCa;
     store(body,t('saved'));
   });
   page.section('voice',t('vcSection'),t('vcSectionH'),[
@@ -113,6 +134,7 @@ function voiceSection(page){
     actionRow(t('vcOn'),t('vcOnH'),[on.node]),
     actionRow(t('vcUrl'),null,[url]),
     actionRow(t('vcToken'),t('vcTokenH'),[tokenState,token,clear]),
+    actionRow(t('vcCa'),t('vcCaH'),[caState,caChoose,caRemove,caInput]),
     actionRow(t('vcPipe'),t('vcPipeH'),[pipe]),
     actionRow(t('vcDev'),t('vcDevH'),[dev]),
     actionRow('',null,[save])]);

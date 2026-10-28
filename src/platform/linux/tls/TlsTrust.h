@@ -70,6 +70,10 @@ namespace awtrix {
 // none loaded every connection fails.
 bool loadTlsTrust(const std::string& caFile, std::string& error);
 void useTlsTrust(httplib::Client& client);
+// Request-local trust, replacing public roots. A pin identifies the exact leaf; a CA verifies host.
+// Callers must validate options and disable redirects before using this policy.
+bool useRequestTlsTrust(httplib::Client& client, const std::string& pin,
+                        const std::string& ca, const std::string& host);
 // A TLS 1.2+ client context that verifies peers against the public anchors during the handshake;
 // nullptr while none are loaded.
 ssl_ctx_st* newTrustedTlsContext();

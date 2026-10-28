@@ -3,6 +3,7 @@
 #include "platform/linux/host/vendor/httplib.h"
 #include "core/script/HttpBodyFilter.h"
 #include "core/script/ModbusTcp.h"
+#include "platform/linux/tls/TlsTrust.h"
 #include "platform/linux/host/compat/WiFiClient.h"
 #include "system/Log.h"
 
@@ -25,6 +26,8 @@ void LinuxScriptHttp::stop() {
   if (worker_.joinable()) worker_.join();
 }
 bool LinuxScriptHttp::request(const script::HttpRequest& req) {
+  auto trust = req.tls;
+  if (!script::normalizeHttpTlsOptions(trust, req.url)) return false;
   if (script::modbus::isUrl(req.url)) {
     script::modbus::Read read;
     if (req.method != "GET" || !script::modbus::parse(req.url, read)) return false;
@@ -93,9 +96,24 @@ void LinuxScriptHttp::run() {
     net::splitUrl(req.url, origin, path);
     httplib::Client client(origin);
     const std::string method = req.method.empty() ? "GET" : req.method;
-    // Redirects are followed for reads only, as on the ESP32: a POST is never sent twice.
+    // Custom trust stays with this destination; other reads follow redirects as on the ESP32.
     const bool reading = method == "GET" || method == "HEAD";
-    net::configure(client, {script::kHttpTimeoutMs, 3, reading});
+    net::configure(client, {script::kHttpTimeoutMs, 3, reading && !req.tls.active()});
+    if (req.tls.active()) {
+      auto trust = req.tls;
+      std::string host(net::parseUrl(req.url)->host);
+      if (!trust.servername.empty()) host = trust.servername;
+      if (host.front() == '[') host = host.substr(1, host.size() - 2);
+      if (!script::normalizeHttpTlsOptions(trust, req.url) ||
+          !useRequestTlsTrust(client, trust.pin, trust.ca, host)) {
+        {
+          std::lock_guard<std::mutex> lock(mutex_);
+          if (stopping_) return;
+        }
+        if (result_) result_(std::move(result));
+        continue;
+      }
+    }
     interrupt_.watch(client);
     script::HttpBodyFilter filter;
     filter.begin(req.find, req.keep, script::httpBodyCap(req.maxBytes));

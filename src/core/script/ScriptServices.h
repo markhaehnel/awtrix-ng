@@ -1,4 +1,5 @@
 #pragma once
+#include "core/script/HttpTlsOptions.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -91,6 +92,7 @@ struct HttpRequest {
   std::string url;
   std::string body;
   HttpHeaders headers;
+  HttpTlsOptions tls;
   std::size_t maxBytes = 0;
   std::string find;
   std::size_t keep = 0;
